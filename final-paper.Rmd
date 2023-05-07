@@ -1,0 +1,356 @@
+---
+title: "CLASSIFYING LYRICS BY THEIR PERFORMER: WHO SINGS “OHOHOHOHOH”?"
+author: "Jess Spayd"
+date: "May 10, 2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+
+# Import libraries
+library(tidyverse)
+library(quanteda)
+library(ROSE)
+library(e1071)
+library(caret)
+library(quanteda.textplots)
+library(quanteda.textstats)
+library(wordcloud2)
+
+
+# Import data
+#setwd('~/Documents/GitHub/text-as-data-sp23/final project')
+lyrics <- read.csv('lyrics-dataset-deduped.csv',
+                   header=FALSE,
+                   stringsAsFactors=FALSE)
+colnames(lyrics) <- c('Artist', 'Title', 'Album', 'Date', 'Lyric', 'Year')
+#head(lyrics)
+
+
+# Split dataset to have equal sample of gaga and non-gaga songs
+## Add labels for classification
+gaga <- subset(lyrics, Artist == 'Lady Gaga')
+gaga$label <- 'gaga'
+not_gaga <- subset(lyrics, Artist != 'Lady Gaga')
+not_gaga$label <- 'not gaga'
+#dim(gaga)
+#dim(not_gaga)
+
+# full dataset
+all_lyrics <- rbind(gaga, not_gaga)
+
+
+```
+
+# Introduction
+
+Take a look at the lyrics word cloud below (Figure 1). Does a particular artist come to mind? Whose lyrics do you think this word cloud represents?
+
+### Figure 1: Word Cloud
+```{r, echo=FALSE}
+
+# to remove "Lady," "Gaga," and "pre" chorus
+gaga_stopwords <- c('lady', 'gaga', 'pre')
+
+# using original dataset
+gaga <- dplyr::filter(gaga, nchar(gaga$'Lyric') >= 5)
+gaga_corpus <- corpus(gaga, text = 'Lyric')
+gaga_dfm <- gaga_corpus %>% 
+  tokens(remove_punct = TRUE,
+         remove_symbols = TRUE,
+         remove_numbers = TRUE,
+         remove_url = TRUE) %>%
+  dfm(tolower=TRUE) %>%
+  dfm_remove(c(stopwords('english'), gaga_stopwords))
+
+# wordcloud
+set.seed(328)
+gaga_dfm_orig <- textstat_frequency(gaga_dfm, n=100)
+wordcloud2(gaga_dfm_orig, 
+           size = 0.5, 
+           shape = 'diamond',
+           fontFamily = 'Arial',
+           color='darkturquoise',
+           minRotation = 0,
+           maxRotation = 0)
+
+
+```
+
+If you have no clue, maybe these are just the typical pop lyrics we’ve grown tired of hearing. But if you guessed Lady Gaga, you would be correct. This figure represents the 100 most common words used in Lady Gaga’s songs released through May 2021, with larger words occurring more frequently in her discography. (Note: Common English words known as stopwords have been excluded, as well as a few others, discussed later.) This study will attempt to use these lyrics to classify which songs in a larger set of artists are, or are not, performed by Lady Gaga.
+
+## Literature Review
+Classification models have been used often in research to classify lyrics on a range of classifications and identifiers including genre, sentiment, and even the performing artist associated with the lyrics. Some studies have attempted to classify the mood of songs using both lyrics and sound, known as multi-modal mood classification. One such study found that lyrics were more effective overall at accurately classifying mood than sound (Hu & Downie, 2010), making the case for using lyrics alone to classify songs. This study utilized Naïve Bayes classification and found n-grams with n > 1 to be most useful in classifying the mood of the song using its lyrics.
+
+One study utilized support vector machines (SVM) to classify genre, ratings, and publication time of a balanced, randomly sampled dataset of English song lyrics (Fell & Sporleder, 2014). The study was exploratory, particularly in predicting ratings and publication time, and it aimed to add knowledge in the area of music recommendation systems. The authors tested n-gram models where n ≤ 3, which they found to be effective, as well as “extended” models with “more sophisticated features,” including style, semantics, orientation and song structure. Those extended models had higher performance than n-gram models.
+
+Fewer studies have used classification to identify the performer based on lyrics, but one example is a study which found classification models to be effective in classifying lyrics to predict the performer of a song between Nirvana and Metallica (Bužić & Dobša, 2018). The analysis utilized a Naïve Bayes model, which performed well, and the researchers suggested that future study should include a larger range of performers.
+
+## Problem
+The present study seeks to explore whether classification methods are effective for identifying one artist’s lyrics against their contemporaries in the same or adjacent genres. Specifically, this study attempts to identify Lady Gaga’s songs from its lyrics in a dataset with lyrics by 21 contemporary artists in pop and hip hop.
+
+# Methods
+## Data
+The dataset used in this analysis includes lyrics to all songs published prior to May 2021 by 21 performers including Lady Gaga. The original dataset included a number of duplicates, primarily including remixed versions of songs with identical or nearly identical lyrics. Duplicates were removed prior to analysis. The dataset includes the artist, album, song title, release date, and lyrics for each song. A label was added programmatically to identify whether each song was performed by Lady Gaga or not. Figure 2 summarizes the number of songs per artists in the original dataset.
+
+```{r, echo=FALSE}
+
+ggplot(all_lyrics, aes(y=fct_rev(fct_infreq(as.factor(Artist))))) +
+  geom_bar() +
+  labs(title='Figure 2: Artists in Original Dataset',
+       x= 'Number of Songs',
+       y= 'Artist') +
+  theme(legend.position = 'none',
+        panel.grid.major.x = element_line(color = 'lightgray'), 
+        panel.grid.minor.x = element_line(color = 'lightgray'),
+        panel.grid.major.y = element_blank(), 
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black"))
+
+```
+
+Since the dataset includes 162 Lady Gaga songs and 2,872 songs by other performers, classification on this dataset would be considered imbalanced. To balance the dataset, an over-sampling technique was used via the ROSE package. This technique duplicated Lady Gaga songs such that there were approximately similar quantities of songs that are performed by Lady Gaga and not. The resulting dataset has 5,736 songs: 2,879 Lady Gaga songs and 2,857 songs by other artists (see Figure 3). The over-sampling solution was preferred to under-sampling to prevent data loss and keep the number of observations high; under-sampling would result in a dataset of only about 324 songs. Figure 4 shows the distribution of artists in the final over-sampled dataset.
+
+```{r, echo=FALSE, warning=FALSE}
+
+# oversampling using ROSE
+oversample <- ovun.sample(label~., data = all_lyrics, 
+                          method = "over", seed = 328)$data
+#dim(oversample)
+
+
+ggplot(oversample, aes(x=label)) +
+  geom_histogram(stat='count') +
+  stat_count(geom = "text", colour = "black", size = 3.5,
+             aes(label = ..count..),position=position_stack(vjust=1.05)) +
+  labs(title='Figure 3: Distribution of Labels in Final Dataset',
+       x= 'Label',
+       y= 'Number of Songs') +
+  theme(legend.position = 'none',
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+
+```
+
+
+```{r, echo=FALSE}
+
+ggplot(oversample, aes(y=fct_rev(fct_infreq(as.factor(Artist))))) +
+  geom_bar()+
+  labs(title='Figure 4: Distribution of Artists in Final Dataset',
+       x= 'Artist',
+       y= 'Number of Songs') +
+  theme(legend.position = 'none',
+        panel.grid.major.x = element_line(color = 'lightgray'), 
+        panel.grid.minor.x = element_line(color = 'lightgray'),
+        panel.grid.major.y = element_blank(), 
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black"))
+
+```
+
+## Model Selection
+This analysis tested two classification techniques: Naïve Bayes and support vector machines (SVM). These techniques are most appropriate for labeled data with known categories, and both have been utilized in previous research using lyrics for classification.
+
+## Featuring Engineering
+The dataset was transformed into a document feature matrix (DFM) which contained only the most relevant tokens. The final DFM excluded punctuation, symbols, numbers, and standard English “stopwords,” a list of common words. All characters in the DFM were lowercase. These parameters were selected as the best combination after testing and comparing model performance.
+
+Grouping tokens into n-grams where n = [2, 3, 4] were tested but ultimately not used, as they did not result in better model performance than using single n-grams. One weakness of using n-grams is that they included stopwords and therefore the top features consisted of very common two-word phrases with little meaning.
+
+Upon discovery that the terms “lady” and “gaga” were very frequent and highly predictive of Lady Gaga’s songs, they were explicitly removed from the DFM. The term “pre” was also removed, as it appeared quite frequently to signal a pre-chorus rather than being an actual lyric. With tweaks to pre-processing, the classification models performed as well or better without those words.
+
+Stemming of the tokens also improved model performance. Stemming involves grouping words with common roots together as one token. The classification models performed quite well without trimming, or removing frequent or infrequent terms, but removing terms that did not appear more than 15 times improved performance slightly while also cutting down processing time by reducing the number of features from 38,383 to just 5,309.
+
+```{r, include=FALSE}
+
+## Remove instrumentals/songs without lyrics
+oversample <- dplyr::filter(oversample, nchar(oversample$'Lyric') >= 5)
+## create corpus
+data_corpus <- corpus(oversample, text = 'Lyric')
+
+# Pre-processing
+data_dfm <- data_corpus %>% 
+  tokens(remove_punct = TRUE,
+         remove_symbols = TRUE,
+         remove_numbers = TRUE,
+         remove_url = TRUE) %>%
+  dfm(tolower=TRUE) %>%
+  dfm_remove(c(stopwords('english'), gaga_stopwords)) %>%
+  dfm_wordstem() %>%
+  dfm_trim(min_termfreq = 15)
+dim(data_dfm)
+# Convert DFM to matrix
+data_dfm_matrix <- convert(data_dfm, to='matrix')
+
+```
+
+## Analysis
+The DFM was split into 80% training and 20% testing data. Two classification models, Naïve Bayes and support vector machines (SVM), were trained and tested on several versions of the DFM. The models were used to generate predictions and then evaluated on Accuracy, Precision and Recall to compare their performance. SVM performed best on all performance measures and was tuned via extensive text pre-processing, described in the previous section, to optimize classification of all songs as either performed by Lady Gaga or not.
+
+```{r, include=FALSE, warning=FALSE}
+
+# Train-Test split
+set.seed(328)
+sample <- sample.int(n = nrow(data_dfm_matrix),
+                     size = floor(.8*nrow(data_dfm_matrix)), 
+                     replace = F)
+train_matrix <- data_dfm_matrix[sample,]
+train_labels <- as.factor(data_dfm$label[sample])
+test_matrix <- data_dfm_matrix[-sample,] 
+test_labels <- as.factor(data_dfm$label[-sample])
+
+# Train SVM model
+svm_model <- svm(
+  x = train_matrix,
+  y = train_labels,
+  kernel = "linear")
+
+# Generate predictions
+pred_svm <- predict(svm_model, test_matrix)
+
+```
+
+# Results
+With adequate text pre-processing and balancing the dataset, Naïve Bayes and SVM classification models were able to identify Lady Gaga’s lyrics against other contemporary performers. While Naïve Bayes worked best with the under-sampled dataset, the over-sampling technique performed best overall and especially with the SVM model.
+
+The SVM model that was trained on the stemmed and trimmed over-sampled dataset, described in the Featuring Engineering section, performed well on three measures: 98% Accuracy, 97% Precision, and 100% Recall. The model correctly labeled all 570 Lady Gaga songs in the testing set, and mislabeled just 20 out of 578 songs that were not performed by Lady Gaga (see Confusion Matrix in Table 1). For this use case, Recall may be the best measure of performance since the model’s task is to understand Lady Gaga’s songs and be able to identify them, rather than being able to identify which songs are not performed by her.
+
+### Table 1: Confusion Matrix and Statistics
+```{r, echo=FALSE}
+
+# Confusion Matrix and Scores
+confusionMatrix(data=pred_svm, 
+                reference = test_labels,
+                mode = 'prec_recall')
+
+```
+
+After removing stopwords, “lady,” and “gaga,” the most common feature in Lady Gaga’s lyrics is “love,” and it appears in more of her songs than any other term with the exception of “just.” Each of these appear in 88 Lady Gaga songs. Figure 5 shows the most common words in Lady Gaga’s lyrics overall, and Figure 6 shows which words appear in more Lady Gaga songs according to the original dataset. Then, Figures 7 and 8, respectively, show the most common words as they appeared in the over-sampled dataset.
+
+### Figures 5 and 6: Top Features in Lady Gaga Lyrics
+```{r, echo=FALSE}
+
+### top features for gaga songs // original dataset
+
+gaga_dfm_orig %>%
+  dplyr::arrange(desc(frequency)) %>%
+  slice(1:20) %>%
+  ggplot(., aes(x=reorder(feature, +frequency), y=frequency, fill=feature)) + 
+  geom_point() + 
+  geom_segment( aes(x=feature, xend=feature, y=0, yend=frequency)) +
+  coord_flip() +
+  labs(title='Figure 5: Top Features in Lady Gaga Lyrics (Original Dataset)',
+       x= 'Feature',
+       y= 'Frequency') +
+  theme(legend.position = 'none',
+        panel.grid.major.x = element_line(color = 'lightgray'), 
+        panel.grid.minor.x = element_line(color = 'lightgray'),
+        panel.grid.major.y = element_blank(), 
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black"))
+
+```
+
+```{r, echo=FALSE}
+
+gaga_dfm_new <- dfm_subset(data_dfm, label == 'gaga')
+gaga_dfm_freq <- textstat_frequency(gaga_dfm_new, n=100)
+
+### top features for gaga songs // over-sampled dataset
+
+gaga_dfm_freq %>%
+  dplyr::arrange(desc(frequency)) %>%
+  slice(1:20) %>%
+  ggplot(., aes(x=reorder(feature, +frequency), y=frequency, fill=feature)) + 
+  geom_point() + 
+  geom_segment( aes(x=feature, xend=feature, y=0, yend=frequency)) +
+  coord_flip() +
+  labs(title='Figure 6: Top Features in Lady Gaga Lyrics (Over-Sampling)',
+       x= 'Feature',
+       y= 'Frequency') +
+  theme(legend.position = 'none',
+        panel.grid.major.x = element_line(color = 'lightgray'), 
+        panel.grid.minor.x = element_line(color = 'lightgray'),
+        panel.grid.major.y = element_blank(), 
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black"))
+
+```
+
+### Figures 7 and 8: Features that Appear in Many Lady Gaga Songs
+```{r, echo=FALSE}
+
+
+## features in most songs // original dataset
+
+gaga_dfm_orig %>%
+  dplyr::arrange(desc(docfreq)) %>%
+  slice(1:20) %>%
+  ggplot(., aes(x=reorder(feature, +docfreq), y=docfreq, fill=feature)) + 
+  geom_point() + 
+  geom_segment( aes(x=feature, xend=feature, y=0, yend=docfreq)) +
+  coord_flip() +
+  labs(title='Figure 7: Features that Appear in Many Lady Gaga Songs (Original Dataset)',
+       x= 'Feature',
+       y= 'Document Frequency')  +
+  theme(legend.position = 'none',
+        panel.grid.major.x = element_line(color = 'lightgray'), 
+        panel.grid.minor.x = element_line(color = 'lightgray'),
+        panel.grid.major.y = element_blank(), 
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black"))
+
+
+```
+
+```{r, echo=FALSE}
+
+## features in most songs // over-sampled dataset
+
+gaga_dfm_freq %>%
+  dplyr::arrange(desc(docfreq)) %>%
+  slice(1:20) %>%
+  ggplot(., aes(x=reorder(feature, +docfreq), y=docfreq, fill=feature)) + 
+  geom_point() + 
+  geom_segment( aes(x=feature, xend=feature, y=0, yend=docfreq)) +
+  coord_flip() +
+  labs(title='Figure 8: Features that Appear in Many Lady Gaga Songs (Over-Sampling)',
+       x= 'Feature',
+       y= 'Document Frequency') +
+  theme(legend.position = 'none',
+        panel.grid.major.x = element_line(color = 'lightgray'), 
+        panel.grid.minor.x = element_line(color = 'lightgray'),
+        panel.grid.major.y = element_blank(), 
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black"))
+
+```
+
+# Conclusion
+This study attempted to use classification methods to identify Lady Gaga’s songs by their lyrics. Indeed, the supper vector machines model was effective in identifying which songs were or were not performed by Lady Gaga, with near-perfect accuracy. These results suggest that classification models can be used to effectively identify other performers or lyricists as well, given adequate training data and a balanced dataset.
+
+This finding is important because it contradicts a common criticism of pop music: that it is unoriginal. One could still argue that “all pop music sounds the same”--this study does not refute this claim–but it suggests that there is in fact something unique about the lyrics of individual pop artists, at least in the case of Lady Gaga, even if the rhythms and melodies all sound the same to some of us.
+
+One of the major limitations of this study is the narrow, non-random sample of artists and songs included in the dataset. The artists in the dataset are primarily contemporary pop and hip hop artists. Both the genres and release dates of this dataset are relatively narrow and were not selected at random but by request, per the data publication on Kaggle. It is therefore reasonable to assume that this model may not be effective on a different set of artists against Lady Gaga. To address this limitation, further exploration of classification models for identifying performers should include a broad, random sample of artists and their lyrics. Unfortunately, the Genius API currently blocks developers from accessing the lyrics for more than one song at a time, making the process of building a lyrics dataset a complex and time-consuming task.
+
+Another limitation of this study is the method used to balance the dataset. The two main approaches to imbalanced classification are under-sampling and over-sampling, and each have their strengths and weaknesses, as discussed in the Methods section. By utilizing over-sampling, data loss was prevented, but over-fitting may have occurred. For this reason, the model and text pre-processing methods used may not be generalizable for broader purposes such as on a dataset with different artists or more songs.
+
+While this is not the first attempt at identifying performers by their lyrics, this study demonstrates that classification models can be used to identify performers even across a wide range of artists, rather than solely between two artists. While this research is useful for those in the musical sphere, these findings may even be extended for use in identifying authors of other texts for historical research purposes.
+
+# References
+Bužić, D., & Dobša, J. (2018). Lyrics classification using Naïve Bayes. Paper presented at the 2018 41st International Convention on Information and Communication Technology, Electronics and Microelectronics (MIPRO), 1011-1015.
+
+Fell, M., & Sporleder, C. (2014). Lyrics-based analysis and classification of music. Paper presented at the Proceedings of COLING 2014, the 25th International Conference on Computational Linguistics: Technical Papers, 620-631.
+
+Hu, X., & Downie, J. S. (2010). When Lyrics Outperform Audio for Music Mood Classification: A Feature Analysis. Paper presented at the 11th International Society for Music Information Retrieval Conference (ISMIR 2010), 619-624.
+
+Shah, D. (2021). Song Lyrics Dataset. Retrieved from https://www.kaggle.com/datasets/deepshah16/song-lyrics-dataset. Data collected via API from www.Genius.com. 
+

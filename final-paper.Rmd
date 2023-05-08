@@ -20,7 +20,6 @@ library(wordcloud2)
 
 
 # Import data
-#setwd('~/Documents/GitHub/text-as-data-sp23/final project')
 lyrics <- read.csv('lyrics-dataset-deduped.csv',
                    header=FALSE,
                    stringsAsFactors=FALSE)

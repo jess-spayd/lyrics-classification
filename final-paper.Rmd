@@ -77,7 +77,7 @@ wordcloud2(gaga_dfm_orig,
 
 ```
 
-If you have no clue, maybe these are just the typical pop lyrics we’ve grown tired of hearing. But if you guessed Lady Gaga, you would be correct. This figure represents the 100 most common words used in Lady Gaga’s songs released through May 2021, with larger words occurring more frequently in her discography. (*Note*: Common English words known as stopwords have been excluded, as well as a few others, discussed later.) This study will attempt to use these lyrics to classify which songs in a larger set of artists are, or are not, performed by Lady Gaga.
+If you have no clue, maybe these are just the typical pop lyrics we’ve grown tired of hearing. Perhaps only “Little Monsters” will guess correctly. This figure represents the 100 most common words used in Lady Gaga’s songs released through May 2021, with larger words occurring more frequently in her discography. (*Note*: Common English words known as stopwords have been excluded, as well as a few others, discussed later.) This study will attempt to use these lyrics to classify which songs in a larger set of artists are, or are not, performed by Lady Gaga.
 
 ### Literature Review
 Classification models have been used often in research to classify lyrics on a range of classifications and identifiers including genre, sentiment, and even the performing artist associated with the lyrics. Some studies have attempted to classify the mood of songs using both lyrics and sound, known as multi-modal mood classification. One such study found that lyrics were more effective overall at accurately classifying mood than sound (Hu & Downie, 2010), making the case for using lyrics alone to classify songs. This study utilized Naïve Bayes classification and found n-grams with n > 1 to be most useful in classifying the mood of the song using its lyrics.
@@ -87,11 +87,11 @@ One study utilized support vector machines (SVM) to classify genre, ratings, and
 Fewer studies have used classification to identify the performer based on lyrics, but one example is a study which found classification models to be effective in classifying lyrics to predict the performer of a song between Nirvana and Metallica (Bužić & Dobša, 2018). The analysis utilized a Naïve Bayes model, which performed well, and the researchers suggested that future study should include a larger range of performers.
 
 ### Problem
-The present study seeks to explore whether classification methods are effective for identifying one artist’s lyrics against their contemporaries in the same or adjacent genres. Specifically, this study attempts to identify Lady Gaga’s songs from its lyrics in a dataset with lyrics by 21 contemporary artists in pop and hip hop.
+The present study seeks to explore whether classification methods are effective for identifying one artist’s lyrics against multiple contemporaries in the same or adjacent genres. Specifically, this study attempts to identify Lady Gaga’s songs from its lyrics in a dataset with lyrics by 21 mainstream contemporary artists in pop and hip hop.
 
 ## Methods
 ### Data
-The dataset used in this analysis includes lyrics to all songs published prior to May 2021 by 21 performers including Lady Gaga. The original dataset included a number of duplicates, primarily including remixed versions of songs with identical or nearly identical lyrics. Duplicates were removed prior to analysis. The dataset includes the artist, album, song title, release date, and lyrics for each song. A binary label was added programmatically to identify whether each song was performed by Lady Gaga or not. Figure 2 summarizes the number of songs per artist in the original dataset.
+The dataset used in this analysis includes lyrics to all songs published prior to May 2021 by 21 performers including Lady Gaga. The original dataset included a number of duplicates, such as remixed versions of songs with identical or nearly identical lyrics. Duplicates were removed prior to analysis. The dataset includes the artist, album, song title, release date, and lyrics for each song. A binary label was added programmatically to identify whether each song was performed by Lady Gaga or not. Figure 2 summarizes the number of songs per artist in the original dataset.
 
 ```{r, echo=FALSE}
 
@@ -115,7 +115,7 @@ ggplot(all_lyrics, aes(y=fct_rev(fct_infreq(as.factor(Artist))), fill=Artist)) +
 
 ```
 
-Since the dataset includes 162 Lady Gaga songs and 2,872 songs by other performers, classification on this dataset would be considered imbalanced. To balance the dataset, an over-sampling technique was used via the ```ROSE``` package. This technique duplicated Lady Gaga songs such that there were approximately similar quantities of songs that are performed by Lady Gaga and not. The resulting dataset has 5,736 songs: 2,879 Lady Gaga songs and 2,857 songs by other artists (see Figure 3). The over-sampling solution was preferred to under-sampling to prevent data loss and keep the number of observations high; under-sampling would result in a dataset of only about 324 songs. Figure 4 shows the distribution of artists in the final over-sampled dataset.
+Since the dataset includes 162 Lady Gaga songs and 2,872 songs by other performers, classification on this dataset would be considered imbalanced. To balance the dataset, an over-sampling technique was used via the ```ROSE``` package. This technique duplicated Lady Gaga songs such that there were approximately similar quantities of songs that are performed by Lady Gaga and not. The resulting dataset has 5,736 songs: 2,879 Lady Gaga songs and 2,857 songs by other artists (see Figure 3). The over-sampling solution was preferred to under-sampling to prevent data loss and keep the number of observations high; under-sampling would result in a dataset of only about 324 songs. Figure 4 shows the distribution of artists in the final over-sampled dataset in order to demonstrate the impact of this method on the dataset.
 
 ```{r, echo=FALSE, warning=FALSE}
 
@@ -151,8 +151,8 @@ ggplot(oversample, aes(y=fct_rev(fct_infreq(as.factor(Artist))), fill=Artist)) +
                              'darkturquoise',
                              'gray', 'gray', 'gray', 'gray', 'gray', 'gray')) +
   labs(title='Figure 4: Distribution of Artists in Final Dataset',
-       x= 'Artist',
-       y= 'Number of Songs') +
+       x= 'Number of Songs',
+       y= 'Artist') +
   theme(legend.position = 'none',
         panel.grid.major.x = element_line(color = 'lightgray'), 
         panel.grid.minor.x = element_line(color = 'lightgray'),
@@ -166,10 +166,10 @@ ggplot(oversample, aes(y=fct_rev(fct_infreq(as.factor(Artist))), fill=Artist)) +
 ### Model Selection
 This analysis tested two classification techniques: Naïve Bayes and support vector machines (SVM). These techniques are most appropriate for labeled data with known categories, and both have been utilized in previous research using lyrics for classification.
 
-### Featuring Engineering
+### Feature Engineering
 The dataset was transformed into a document feature matrix (DFM) which contained only the most relevant tokens. The final DFM excluded punctuation, symbols, numbers, and standard English “stopwords,” a list of common words. All characters in the DFM were lowercase. These parameters were selected as the best combination after testing and comparing model performance.
 
-Grouping tokens into n-grams where ```n = [2, 3, 4]``` were tested but ultimately not used, as they did not result in better model performance than using single n-grams. One weakness of using n-grams is that they included stopwords and therefore the top features consisted of very common two-word phrases with little meaning.
+Grouping tokens into n-grams where ```n = [2, 3, 4]``` were tested but ultimately not used, as they did not result in better model performance than using single n-grams. One weakness of using n-grams was that they included stopwords and therefore the top features consisted of very common two-word phrases with little meaning.
 
 Upon discovery that the terms “lady” and “gaga” were very frequent and highly predictive of Lady Gaga’s songs, they were explicitly removed from the DFM. The term “pre” was also removed, as it appeared quite frequently to signal a pre-chorus rather than being an actual lyric. With tweaks to pre-processing, the classification models performed as well or better without those words.
 
@@ -225,9 +225,9 @@ pred_svm <- predict(svm_model, test_matrix)
 ```
 
 ## Results
-With adequate text pre-processing and balancing the dataset, Naïve Bayes and SVM classification models were able to identify Lady Gaga’s lyrics against other contemporary performers. While Naïve Bayes worked best with the under-sampled dataset, the over-sampling technique performed best overall and especially with the SVM model.
+With adequate text pre-processing and balancing the dataset, Naïve Bayes and SVM classification models were able to identify Lady Gaga’s lyrics against other mainstream performers. While Naïve Bayes worked best with the under-sampled dataset, the over-sampling technique performed best overall and especially with the SVM model.
 
-The SVM model that was trained on the stemmed and trimmed over-sampled dataset, described in the Featuring Engineering section, performed well on three measures: 98% Accuracy, 97% Precision, and 100% Recall. The model correctly labeled all 570 Lady Gaga songs in the testing set, and mislabeled just 20 out of 578 songs that were not performed by Lady Gaga (see Confusion Matrix in Table 1). For this use case, Recall may be the best measure of performance since the model’s task is to understand Lady Gaga’s songs and be able to identify them, rather than being able to identify which songs are not performed by her.
+The SVM model that was trained on the stemmed and trimmed over-sampled dataset, described in the Featuring Engineering section, performed well on three measures: 98% Accuracy, 97% Precision, and 100% Recall. The model correctly labeled all 570 Lady Gaga songs in the testing set, and mislabeled just 20 out of 578 songs that were not performed by Lady Gaga (see Confusion Matrix in Table 1). For this use case, Recall may be the best measure of performance since the model’s task is to understand Lady Gaga’s songs and be able to identify them, while the “Negative” class, “not gaga,” is not a cohesive group.
 
 **Table 1: Confusion Matrix and Statistics**
 ```{r, echo=FALSE}
@@ -351,11 +351,11 @@ This study attempted to use classification methods to identify Lady Gaga’s son
 
 This finding is important because it contradicts a common criticism of pop music: that it is unoriginal. One could still argue that “all pop music sounds the same”--this study does not refute this claim–but it suggests that there is in fact something unique about the lyrics of individual pop artists, at least in the case of Lady Gaga, even if the rhythms and melodies all sound the same to some of us.
 
-One of the major limitations of this study is the narrow, non-random sample of artists and songs included in the dataset. The artists in the dataset are primarily contemporary pop and hip hop artists. Both the genres and release dates of this dataset are relatively narrow and were not selected at random but by request, per the data publication on Kaggle. It is therefore reasonable to assume that this model may not be effective on a different set of artists against Lady Gaga. To address this limitation, further exploration of classification models for identifying performers should include a broad, random sample of artists and their lyrics. Unfortunately, the Genius API currently blocks developers from accessing the lyrics for more than one song at a time, making the process of building a lyrics dataset a complex and time-consuming task; it also has the potential to violate copyright law.
+One of the major limitations of this study is the narrow, non-random sample of artists and songs included in the dataset. The artists in the dataset are primarily mainstream contemporary pop and hip hop artists. Both the genres and release dates of this dataset are relatively narrow and were not selected at random but by individual preference or request, per the data publication on Kaggle. It is therefore reasonable to assume that this model may not be effective on a different set of artists against Lady Gaga. To address this limitation, further exploration of classification models for identifying performers should include a broad, random sample of artists and their lyrics. Unfortunately, the Genius API currently blocks developers from accessing the lyrics for more than one song at a time, making the process of building a large lyrics dataset a complex and time-consuming task; it also has the potential to violate copyright law.
 
 Another limitation of this study is the method used to balance the dataset. The two main approaches to imbalanced classification are under-sampling and over-sampling, and each have their strengths and weaknesses, as discussed in the Methods section. By utilizing over-sampling, data loss was prevented, but over-fitting may have occurred. For this reason, the model and text pre-processing methods used may not be generalizable for broader purposes such as on a dataset with different artists or more songs.
 
-While this is not the first attempt at identifying performers by their lyrics, this study demonstrates that classification models can be used to identify performers even across a wide range of artists, rather than solely between two artists. While this research is useful for those in the musical sphere, these findings may even be extended for use in identifying authors of other texts for historical research purposes.
+While this is not the first attempt at identifying performers by their lyrics, this study demonstrates that classification models can be used to identify performers even across a wide range of artists, rather than solely between two artists. The methods used in this study could be extended for use in identifying authors of other texts, for example, for historical research purposes like the classic problem of who wrote each of the Federalist Papers. But the implications for the music industry are a bit more fun, like investigating songs that might have Taylor Swift as a ghost writer. In defense of pop music, I leave you with this: Rah, Rah, Ahahah!
 
 ## References
 Bužić, D., & Dobša, J. (2018). Lyrics classification using Naïve Bayes. Paper presented at the *2018 41st International Convention on Information and Communication Technology, Electronics and Microelectronics (MIPRO)*, 1011-1015.
